@@ -1,21 +1,28 @@
 # FrankieBot
 
-A Facebook messenger bot
+A Facebook messenger bot with various commands.
 
 [https://facebook.com/FrankieHelp](https://facebook.com/FrankieHelp)
 
-Available Commands:
+## Available Commands:
 
-Images
+#### Images
+<kbd><img src="./images/images.png"></kbd>
 
-Define
+#### Define
+<kbd><img src="./images/define.png"></kbd>
 
-Manga
+#### Manga
+<kbd><img src="./images/manga.png"></kbd>
 
-GetMotivated
+#### Motivation
+<kbd><img src="./images/motivation.png"></kbd>
 
-Meme
+#### Meme
+<kbd><img src="./images/meme.png"></kbd>
 
-Jokes
+#### Jokes
+<kbd><img src="./images/jokes.png"></kbd>
 
-ShowerThoughts
+#### Shower Thoughts
+<kbd><img src="./images/shower.png"></kbd>
