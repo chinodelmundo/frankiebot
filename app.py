@@ -22,8 +22,8 @@ quick_replies_list = [{
     },
     {
         "content_type":"text",
-        "title":"Get Motivated",
-        "payload":"GetMotivated",
+        "title":"Motivation",
+        "payload":"Motivation",
     },
     {
         "content_type":"text",
@@ -35,11 +35,6 @@ quick_replies_list = [{
         "title":"Jokes",
         "payload":"Jokes",
     }]
-
-commands = {
-    "reddit": ['getmotivated','meme','jokes','showerthoughts'],
-    "search": ['images', 'define', 'manga']
-};
 
 @app.route('/', methods=['GET'])
 def handle_verification():
@@ -76,219 +71,214 @@ def messaging_events(payload):
             yield event["sender"]["id"], "I can't echo this"
 
 
-def process_message(recipient, text):
+def process_message(recipient, message):
     try:
-        text = text.decode('ascii')
+        message = message.decode('ascii')
     except AttributeError:
         pass
 
-    reddit_command = False
-    search_command = False
-    command = text.split()[0].lower()
-
-    if command in commands["reddit"]:
-        reddit_command = True
-        subreddit_name = command
-    elif command in commands["search"]:
-        search_command = True
-
+    command = message.split()[0].lower()
 
     myUser = get_or_create(db.session, Users, name=recipient)
 
-    if reddit_command:
-        if subreddit_name == "showerthoughts":
-            for submission in reddit.subreddit(subreddit_name).hot(limit=None):
-                if (submission.is_self == True):
-                    query_result = Posts.query.filter(Posts.name == submission.id).first()
-                    if query_result is None:
-                        myPost = Posts(submission.id, submission.title)
-                        myUser.posts.append(myPost)
-                        db.session.commit()
-                        payload = submission.title
-                        break
-                    elif myUser not in query_result.users:
-                        myUser.posts.append(query_result)
-                        db.session.commit()
-                        payload = submission.title
-                        break
-                    else:
-                        continue  
-
-            send_text(recipient, payload, quick_replies_list)
-
-        elif subreddit_name == "jokes":
-
-            for submission in reddit.subreddit(subreddit_name).hot(limit=None):
-                if ((submission.is_self == True) and ( submission.link_flair_text is None)):
-                    query_result = Posts.query.filter(Posts.name == submission.id).first()
-
-                    if query_result is None:
-                        myPost = Posts(submission.id, submission.title)
-                        myUser.posts.append(myPost)
-                        db.session.commit()
-                        payload = submission.title
-                        payload_text = submission.selftext
-                        break
-                    elif myUser not in query_result.users:
-                        myUser.posts.append(query_result)
-                        db.session.commit()
-                        payload = submission.title
-                        payload_text = submission.selftext
-                        break
-                    else:
-                        continue  
-
-            send_text(recipient, payload)
-            send_text(recipient, payload_text, quick_replies_list)
-
-        else:
-            payload = "http://imgur.com/WeyNGtQ.jpg"
-
-            for submission in reddit.subreddit(subreddit_name).hot(limit=None):
-                if (submission.link_flair_css_class == 'image') or ((submission.is_self != True) and ((".jpg" in submission.url) or (".png" in submission.url))):
-                    query_result = Posts.query.filter(Posts.name == submission.id).first()
-                    if query_result is None:
-                        myPost = Posts(submission.id, submission.url)
-                        myUser.posts.append(myPost)
-                        db.session.commit()
-                        payload = submission.url
-                        break
-                    elif myUser not in query_result.users:
-                        myUser.posts.append(query_result)
-                        db.session.commit()
-                        payload = submission.url
-                        break
-                    else:
-                        continue
-
-            send_image(recipient, payload, quick_replies_list)
-
-    elif search_command:
-        if command == 'images':
-            if '*' in text:
-                index = int(text.split('*')[1])
-                search_list = text.split('*')[0].split()
-            else:
-                index = 0
-                search_list = text.split()
-
-            if len(search_list) > 1:
-                url = 'https://www.googleapis.com/customsearch/v1?key=' + os.environ['API_KEY'] + '&cx=' + os.environ['SE_ID'] + '&searchType=image&q=' + '+'.join(search_list[1:])
-                res = requests.get(url)
-                images = []
-
-                data = res.json()
-                items = data['items']
-                for item in items:
-                    link = item['link']
-                    if '.jpg' in link:
-                        images.append(link)
-
-                if(len(images) > 0):
-                    quick_reply = [{
-                        "content_type": "text",
-                        "title": "More images",
-                        "payload": " ".join(search_list) + ' *' + str(index + 1)
-                    }]
-
-                    for i in range(3):
-                        if(i + (index * 3) < len(images)):
-                            send_image(recipient, images[i + (index * 3)], quick_reply)
-                        else:
-                            send_text(recipient, 'No more images.')
-                else:
-                    send_text(recipient, "No image found.")
-            else:
-                send_text(recipient, "Type 'images' plus search term. Ex: 'images james reid'")
-        elif command == 'define':
-            search_list = text.split()
-
-            if len(search_list) > 1:
-                url = 'https://www.merriam-webster.com/dictionary/' + search_list[1]
-                res = requests.get(url)
-                soup = bs4.BeautifulSoup(res.text, "html.parser")
-                lis = soup.select('.definition-list')[0].select('li')
-
-                if(len(lis) > 1):
-                    for index, li in enumerate(lis):
-                        definition = str(index + 1) + '.'
-                        spans = li.findAll('span', { 'class' : None })
-
-                        for span in spans:
-                            definition += '\t' + unicodedata.normalize("NFKD", span.getText()) + '\n'
-
-                        send_text(recipient, definition)
-                else:
-                    send_text(recipient, "No definition found.")
-            else:
-                send_text(recipient, "Type 'define' plus search term. Ex: 'define acrophobia'")
-        elif command == 'manga':
-            #mange title *chapter *page
-            if '*' in text:
-                chapter = int(text.split('*')[1])
-                page = int(text.split('*')[2])
-                search_list = text.split('*')[0].split()
-            else:
-                search_list = text.split()
-
-            if len(search_list) > 1:
-                url = 'http://www.mangareader.net'
-                res = requests.get(url + '/search/?w=' + '+'.join(search_list[1:]))
-                soup = bs4.BeautifulSoup(res.text, "html.parser")
-                manga_results = soup.select('.mangaresultitem .manga_name a')
-
-                if len(manga_results) > 0:
-                    if '*' in text:
-                        print(url + manga_results[0].attrs['href'] + '/' + str(chapter) + '/' + str(page))
-                        res = requests.get(url + manga_results[0].attrs['href'] + '/' + str(chapter) + '/' + str(page))
-                    else:
-                        res = requests.get(url + manga_results[0].attrs['href'])
-                        soup = bs4.BeautifulSoup(res.text, "html.parser")
-                        latest_chapters = soup.select('#latestchapters li a')
-                        res = requests.get(url + latest_chapters[0].attrs['href'])
-                        page = 1
-                        print(url + latest_chapters[0].attrs['href'])
-
-                    soup = bs4.BeautifulSoup(res.text, "html.parser")
-                    img_element = soup.select('#img')
-                    title = soup.select('#mangainfo h1')[0].getText()
-                    title_array = title.split(" ")
-                    chapter = int(title_array[len(title_array) - 1])
-                    title += ' - Page ' + str(page)
-
-                    if len(img_element) > 0:
-                        img_url = img_element[0].get('src')
-                        text = text.split('*')[0]
-                        quick_reply = [
-                            {
-                                "content_type": "text",
-                                "title": "Next Page",
-                                "payload": text + ' *' + str(chapter) + ' *' + str(page + 1)
-                            },
-                            {
-                                "content_type": "text",
-                                "title": "Previous Chapter",
-                                "payload": text + ' *' + str(chapter - 1) + ' *1'
-                            },
-                            {
-                                "content_type": "text",
-                                "title": "Next Chapter",
-                                "payload": text + ' *' + str(chapter + 1) + ' *1'
-                            }
-                        ]
-
-                        send_text(recipient, title)
-                        send_image(recipient, img_url, quick_reply)
-                    else:
-                        send_text(recipient, 'No image found.')
-                else:
-                    send_text(recipient, 'Manga not found.')
-            else:
-                send_text(recipient, "Type 'manga' plus manga title. Ex: 'manga one piece'")
-
+    if command == 'images':
+        search_images(message, recipient)
+    elif command == 'define':
+        search_definitions(message, recipient)
+    elif command == 'manga':
+        search_manga(message, recipient)
+    elif command in ['shower', 'showerthoughts']:
+        subreddit_name = 'showerthoughts'
+        payload = get_new_self_post(subreddit_name, myUser)
+        send_text(recipient, payload['title'], quick_replies_list)
+    elif command in ['joke', 'jokes']:
+        subreddit_name = 'jokes'
+        payload = get_new_self_post(subreddit_name, myUser)
+        send_text(recipient, payload['title'])
+        send_text(recipient, payload['body'], quick_replies_list)
+    elif command in ['meme', 'memes']:
+        subreddit_name = 'meme'
+        payload = get_post_image(subreddit_name, myUser)
+        send_image(recipient, payload, quick_replies_list)
+    elif command in ['motivation', 'getmotivated']:
+        subreddit_name = 'getmotivated'
+        payload = get_post_image(subreddit_name, myUser)
+        send_image(recipient, payload, quick_replies_list)
+    elif command in ['commands', 'help']:
+        send_commands_list(recipient)
     else:
-        send_text(recipient, "Unknown command.")
-        send_text(recipient, "Available Commands: " + ', '.join(commands["search"] + commands["reddit"]))
+        send_text(recipient, "Unknown command. Send 'commands' or 'help' to get the list of available commands.")
+
+def get_new_self_post(subreddit_name, myUser):
+    payload = {}
+
+    for submission in reddit.subreddit(subreddit_name).hot(limit=None):
+        if ((submission.is_self == True) and ( submission.link_flair_text is None)):
+            query_result = Posts.query.filter(Posts.name == submission.id).first()
+
+            if query_result is None:
+                myPost = Posts(submission.id, submission.title)
+                myUser.posts.append(myPost)
+                db.session.commit()
+                payload['title'] = submission.title
+                payload['body'] = submission.selftext
+                break
+            elif myUser not in query_result.users:
+                myUser.posts.append(query_result)
+                db.session.commit()
+                payload['title'] = submission.title
+                payload['body'] = submission.selftext
+                break
+            else:
+                continue
+
+    return payload
+
+def get_post_image(subreddit_name, myUser):
+    payload = "http://imgur.com/WeyNGtQ.jpg"
+
+    for submission in reddit.subreddit(subreddit_name).hot(limit=None):
+        if (submission.link_flair_css_class == 'image') or ((submission.is_self != True) and ((".jpg" in submission.url) or (".png" in submission.url))):
+            query_result = Posts.query.filter(Posts.name == submission.id).first()
+            if query_result is None:
+                myPost = Posts(submission.id, submission.url)
+                myUser.posts.append(myPost)
+                db.session.commit()
+                payload = submission.url
+                break
+            elif myUser not in query_result.users:
+                myUser.posts.append(query_result)
+                db.session.commit()
+                payload = submission.url
+                break
+            else:
+                continue
+
+    return payload
+
+def search_images(message, recipient):
+    if '*' in message:
+        index = int(message.split('*')[1])
+        search_list = message.split('*')[0].split()
+    else:
+        index = 0
+        search_list = message.split()
+
+    if len(search_list) > 1:
+        url = 'https://www.googleapis.com/customsearch/v1?key=' + os.environ['API_KEY'] + '&cx=' + os.environ['SE_ID'] + '&searchType=image&q=' + '+'.join(search_list[1:])
+        res = requests.get(url)
+        images = []
+
+        data = res.json()
+        items = data['items']
+        for item in items:
+            link = item['link']
+            if '.jpg' in link:
+                images.append(link)
+
+        if(len(images) > 0):
+            quick_reply = [{
+                "content_type": "text",
+                "title": "More images",
+                "payload": " ".join(search_list) + ' *' + str(index + 1)
+            }]
+
+            for i in range(3):
+                if(i + (index * 3) < len(images)):
+                    send_image(recipient, images[i + (index * 3)], quick_reply)
+                else:
+                    send_text(recipient, 'No more images.')
+        else:
+            send_text(recipient, "No image found.")
+    else:
+        send_text(recipient, "Type 'images' plus search term. Ex: 'images james reid'")
+
+def search_definitions(message, recipient):
+    search_list = message.split()
+
+    if len(search_list) > 1:
+        url = 'https://www.merriam-webster.com/dictionary/' + search_list[1]
+        res = requests.get(url)
+        soup = bs4.BeautifulSoup(res.text, "html.parser")
+        lis = soup.select('.definition-list')[0].select('li')
+
+        if(len(lis) > 1):
+            for index, li in enumerate(lis):
+                definition = str(index + 1) + '.'
+                spans = li.findAll('span', { 'class' : None })
+
+                for span in spans:
+                    definition += '\t' + unicodedata.normalize("NFKD", span.getText()) + '\n'
+
+                send_text(recipient, definition)
+        else:
+            send_text(recipient, "No definition found.")
+    else:
+        send_text(recipient, "Type 'define' plus search term. Ex: 'define programming'")
+
+def search_manga(message, recipient):
+    #FORMAT: manga title *chapter *page
+    if '*' in message:
+        chapter = int(message.split('*')[1])
+        page = int(message.split('*')[2])
+        search_list = message.split('*')[0].split()
+    else:
+        search_list = message.split()
+
+    if len(search_list) > 1:
+        url = 'http://www.mangareader.net'
+        res = requests.get(url + '/search/?w=' + '+'.join(search_list[1:]))
+        soup = bs4.BeautifulSoup(res.text, "html.parser")
+        manga_results = soup.select('.mangaresultitem .manga_name a')
+
+        if len(manga_results) > 0:
+            if '*' in text:
+                print(url + manga_results[0].attrs['href'] + '/' + str(chapter) + '/' + str(page))
+                res = requests.get(url + manga_results[0].attrs['href'] + '/' + str(chapter) + '/' + str(page))
+            else:
+                res = requests.get(url + manga_results[0].attrs['href'])
+                soup = bs4.BeautifulSoup(res.text, "html.parser")
+                latest_chapters = soup.select('#latestchapters li a')
+                res = requests.get(url + latest_chapters[0].attrs['href'])
+                page = 1
+                print(url + latest_chapters[0].attrs['href'])
+
+            soup = bs4.BeautifulSoup(res.text, "html.parser")
+            img_element = soup.select('#img')
+            title = soup.select('#mangainfo h1')[0].getText()
+            title_array = title.split(" ")
+            chapter = int(title_array[len(title_array) - 1])
+            title += ' - Page ' + str(page)
+
+            if len(img_element) > 0:
+                img_url = img_element[0].get('src')
+                text = text.split('*')[0]
+                quick_reply = [
+                    {
+                        "content_type": "text",
+                        "title": "Next Page",
+                        "payload": text + ' *' + str(chapter) + ' *' + str(page + 1)
+                    },
+                    {
+                        "content_type": "text",
+                        "title": "Previous Chapter",
+                        "payload": text + ' *' + str(chapter - 1) + ' *1'
+                    },
+                    {
+                        "content_type": "text",
+                        "title": "Next Chapter",
+                        "payload": text + ' *' + str(chapter + 1) + ' *1'
+                    }
+                ]
+
+                send_text(recipient, title)
+                send_image(recipient, img_url, quick_reply)
+            else:
+                send_text(recipient, 'No image found.')
+        else:
+            send_text(recipient, 'Manga not found.')
+    else:
+        send_text(recipient, "Type 'manga' plus manga title. Ex: 'manga one piece'")
 
 def send_text(recipient, payload, quick_replies=[]):
     if len(quick_replies) > 0:
@@ -354,45 +344,29 @@ def send_image(recipient, payload, quick_replies=[]):
     if r.status_code != requests.codes.ok:
         print(r.text)
 
-def send_images(recipient, images, title):
-    print('Sending images: {}'.format(images))
-
+def send_commands_list(recipient):
     r = requests.post("https://graph.facebook.com/v2.6/me/messages",
         params={"access_token": FB_PAT},
         data=json.dumps({
             "recipient": {"id": recipient},
             "message": {
                 "attachment": {
-                    "type":"template",
+                    "type": "template",
                     "payload":{
-                        "template_type":"generic",
+                        "template_type": "list",
+                        "top_element_style": "compact",
                         "elements":[
                             {
-                                "title": title,
-                                "image_url": images[0],
-                                "default_action": {
-                                    "type": "web_url",
-                                    "url": images[0],
-                                    "webview_height_ratio": "compact"
-                                }
+                                "title": "Images",
+                                "subtitle": "Retrieves images. Example: 'Images cute puppies'"
                             },
                             {
-                                "title": title,
-                                "image_url": images[1],
-                                "default_action": {
-                                    "type": "web_url",
-                                    "url": images[1],
-                                    "webview_height_ratio": "compact"
-                                }
+                                "title": "Define",
+                                "subtitle": "Retrieves the definition of a word. Example: 'Define programming'" 
                             },
                             {
-                                "title": title,
-                                "image_url": images[2],
-                                "default_action": {
-                                    "type": "web_url",
-                                    "url": images[2],
-                                    "webview_height_ratio": "compact"
-                                }
+                                "title": "Manga",
+                                "subtitle": "Retrieves the latest chapter of a manga. Example:'Manga Pne Piece'" 
                             }
                         ]
                     }
@@ -404,30 +378,32 @@ def send_images(recipient, images, title):
     if r.status_code != requests.codes.ok:
         print(r.text)
 
-def send_list(recipient, images, title):
-    print('Sending images: {}'.format(images))
-
     r = requests.post("https://graph.facebook.com/v2.6/me/messages",
         params={"access_token": FB_PAT},
         data=json.dumps({
             "recipient": {"id": recipient},
             "message": {
                 "attachment": {
-                    "type":"template",
+                    "type": "template",
                     "payload":{
-                        "template_type":"list",
+                        "template_type": "list",
+                        "top_element_style": "compact",
                         "elements":[
                             {
-                                "title": title,
-                                "image_url": images[0]  
+                                "title": "Motivation",
+                                "subtitle": "Replies a motivational image or text. Just send 'Motivation' to the bot."
                             },
                             {
-                                "title": title,
-                                "image_url": images[1]  
+                                "title": "Meme",
+                                "subtitle": "Replies a meme image. Just send 'Meme' to the bot."
                             },
                             {
-                                "title": title,
-                                "image_url": images[2]  
+                                "title": "Jokes",
+                                "subtitle": "Replies a joke. Just send 'Jokes' to the bot." 
+                            },
+                            {
+                                "title": "Shower Thoughts",
+                                "subtitle": "Replies a random thought people had. Just send 'ShowerThoughts' to the bot." 
                             }
                         ]
                     }
